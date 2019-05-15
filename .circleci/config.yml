@@ -1,9 +1,38 @@
 version: 2.1
 
-orbs:
-  hello: circleci/hello-build@0.0.7 # uses the circleci/buildpack-deps Docker image
+#orbs:
+#  hello: circleci/hello-build@0.0.7 # uses the circleci/buildpack-deps Docker image
 
-workflows:
-  "Hello Workflow":
-    jobs:
-      - hello/hello-build
+jobs:
+  build:
+    docker:
+      - image: circleci/node:4.8.2
+    steps:
+      - checkout
+      - run: echo "hello world"
+
+commands:
+  auth:
+    description: "Authenticate in Kublr Control Plane"
+    parameters:
+      kublr-endpoint:
+        type: env_var_name
+        description: Kublr Control Plane URL
+        default: KUBLR_ENDPOINT
+      kublr-username:
+        type: env_var_name
+        description: Kublr Control Plane Username
+        default: KUBLR_USERNAME
+      kublr-endpoint:
+        type: env_var_name
+        description: Kublr Control Plane Password
+        default: KUBLR_PASSWORD
+    steps:
+      - |
+        KUBLR_TOKEN="$(curl \
+          -d "grant_type=password" \
+          -d "client_id=kublr-ui" \
+          -d "username=${<<parameters.kublr-username>>}" \
+          -d "password=${<<parameters.kublr-password>>}" \
+          "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token" | jq -r '.access_token')"
+      - echo Token ${KUBLR_TOKEN}
