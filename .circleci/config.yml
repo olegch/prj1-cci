@@ -10,144 +10,147 @@ workflows:
 jobs:
   my-test-build:
     docker:
-      - image: circleci/node:4.8.2
+      - image: circleci/node:9.9.0
     steps:
       - checkout
-      - kublr-auth
+      - kublr-api/kublr-api-auth
       - run: 'echo "KUBLR_TOKEN=${KUBLR_TOKEN:-}"'
-      - kublr-api-call:
+      - kublr-api/kublr-api-call:
           result-env-var: KUBLR_VERSION_JSON
           result-file: kublr-version.json
       - run: 'echo "KUBLR_VERSION_JSON=${KUBLR_VERSION_JSON:-}"'
       - run: 'cat kublr-version.json'
-      - kublr-get-cluster-config:
+      - kublr-api/kublr-api-get-cluster-config:
           kublr-space: demo
           kublr-cluster: aws-demo-1
       - run: 'echo "KUBECONFIG=${KUBECONFIG:-}"'
       - run: 'cat config'
       - run: 'cat "${KUBECONFIG:-}"'
-commands:
-  kublr-auth:
-    description: "Authenticate in Kublr Control Plane"
-    parameters:
-      kublr-endpoint:
-        type: env_var_name
-        description: Kublr Control Plane URL
-        default: KUBLR_ENDPOINT
-      kublr-username:
-        type: env_var_name
-        description: Kublr Control Plane Username
-        default: KUBLR_USERNAME
-      kublr-password:
-        type: env_var_name
-        description: Kublr Control Plane Password
-        default: KUBLR_PASSWORD
-      kublr-token:
-        type: env_var_name
-        description: Kublr Control Plane Password
-        default: KUBLR_TOKEN
-    steps:
-      - run:
-          name: "Kublr authenticate"
-          command: |
-            if [ -n "${<<parameters.kublr-token>>:-}" ] ; then
-              if ! curl -s -f -H "Authorization: Bearer ${<<parameters.kublr-token>>:-}" "${<<parameters.kublr-endpoint>>}/api/meta/version" > /dev/null ; then
-                echo "Kublr token is expired, refresh"
-                export <<parameters.kublr-token>>=
-              else
-                echo "Kublr token is valid"
-              fi
-            fi
-            if [ -z "${<<parameters.kublr-token>>:-}" ] ; then
-              echo "Refreshing Kublr token with endpoint '${<<parameters.kublr-endpoint>>:-}' and user '${<<parameters.kublr-username>>:-}'"
-              KUBLR_RESPONSE="$(curl -s \
-                -d "grant_type=password" \
-                -d "client_id=kublr-ui" \
-                -d "username=${<<parameters.kublr-username>>}" \
-                -d "password=${<<parameters.kublr-password>>}" \
-                "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token")"
-              export <<parameters.kublr-token>>="$(echo "${KUBLR_RESPONSE:-}" | jq -r '.access_token // empty')"
-              if [ -n "${<<parameters.kublr-token>>:-}" ]; then
-                echo "Kublr token refresh successful"
-                echo "export <<parameters.kublr-token>>='${<<parameters.kublr-token>>}'" >> $BASH_ENV
-              else
-                echo "Kublr token refresh failed, response: ${KUBLR_RESPONSE}"
-                exit 1
-              fi
-            fi
-  kublr-api-call:
-    description: "Authenticate in Kublr Control Plane"
-    parameters:
-      kublr-endpoint:
-        type: env_var_name
-        description: Kublr Control Plane URL
-        default: KUBLR_ENDPOINT
-      kublr-token:
-        type: env_var_name
-        description: Kublr Control Plane Password
-        default: KUBLR_TOKEN
-      kublr-api-call-method:
-        type: string
-        description: Method to use when calling API (GET, POST, DELETE etc)
-        default: GET
-      kublr-api-call-path:
-        type: string
-        description: API path to call
-        default: /api/meta/version
-      result-env-var:
-        type: string
-        description: Env var to use to save result (none if empty)
-        default: ''
-      result-file:
-        type: string
-        description: File to save the result to (none if empty)
-        default: ''
-    steps:
-      - run:
-          name: "Kublr API call"
-          command: |
-            OUT="$(curl -s -f -H "Authorization: Bearer ${<<parameters.kublr-token>>:-}" "-X<<parameters.kublr-api-call-method>>" "${<<parameters.kublr-endpoint>>}<<parameters.kublr-api-call-path>>")"
-            if [ "$?" != '0' ] ; then
-              echo "Kublr API call -X'<<parameters.kublr-api-call-method>>' '${<<parameters.kublr-endpoint>>}<<parameters.kublr-api-call-path>>' failed, result: ${OUT:-}"
-              exit 1
-            fi
-            echo "Kublr API call -X'<<parameters.kublr-api-call-method>>' '${<<parameters.kublr-endpoint>>}<<parameters.kublr-api-call-path>>' successful"
-            if [ -n '<<parameters.result-file>>' ] ; then
-              echo "Saving the result to file '<<parameters.result-file>>'"
-              echo "${OUT:-}" > '<<parameters.result-file>>'
-            fi
-            if [ -n '<<parameters.result-env-var>>' ] ; then
-              echo "Saving the result to env var '<<parameters.result-env-var>>'"
-              echo "export <<parameters.result-env-var>>='${OUT:-}'" >> $BASH_ENV
-            fi
-  kublr-get-cluster-config:
-    description: "Retrieve a kubectl config file for a Kublr Kubernetes cluster"
-    parameters:
-      kublr-space:
-        type: string
-        description: Kublr space name
-        default: 'default'
-      kublr-cluster:
-        type: string
-        description: Kublr cluster name
-        default: ''
-      kubeconfig-env-var:
-        type: env_var_name
-        description: Env var for Kubernetes config path (set to empty if need not be set)
-        default: 'KUBECONFIG'
-      kubeconfig-file:
-        type: string
-        description: File for Kubernetes config
-        default: 'config'
-    steps:
-      - kublr-api-call:
-          kublr-api-call-path: '/api/spaces/<<parameters.kublr-space>>/cluster/<<parameters.kublr-cluster>>/config'
-          result-file: '<<parameters.kubeconfig-file>>'
-      - run:
-          name: Configure Kubernetes Config file
-          command: |
-            if [ -n '<<parameters.kubeconfig-env-var>>' ] ; then
-              export <<parameters.kubeconfig-env-var>>="$(readlink -f '<<parameters.kubeconfig-file>>')"
-              echo "Setting env var '<<parameters.kubeconfig-env-var>>' to '${<<parameters.kubeconfig-env-var>>:-}'"
-              echo "export <<parameters.kubeconfig-env-var>>='${<<parameters.kubeconfig-env-var>>:-}'" >> $BASH_ENV
-            fi
+
+orbs:
+  kublr-api:
+    commands:
+      kublr-api-auth:
+        description: "Authenticate in Kublr Control Plane"
+        parameters:
+          kublr-endpoint:
+            type: env_var_name
+            description: Kublr Control Plane URL
+            default: KUBLR_ENDPOINT
+          kublr-username:
+            type: env_var_name
+            description: Kublr Control Plane Username
+            default: KUBLR_USERNAME
+          kublr-password:
+            type: env_var_name
+            description: Kublr Control Plane Password
+            default: KUBLR_PASSWORD
+          kublr-token:
+            type: env_var_name
+            description: Kublr Control Plane Password
+            default: KUBLR_TOKEN
+        steps:
+          - run:
+              name: "Kublr authenticate"
+              command: |
+                if [ -n "${<<parameters.kublr-token>>:-}" ] ; then
+                  if ! curl -s -f -H "Authorization: Bearer ${<<parameters.kublr-token>>:-}" "${<<parameters.kublr-endpoint>>}/api/meta/version" > /dev/null ; then
+                    echo "Kublr token is expired, refresh"
+                    export <<parameters.kublr-token>>=
+                  else
+                    echo "Kublr token is valid"
+                  fi
+                fi
+                if [ -z "${<<parameters.kublr-token>>:-}" ] ; then
+                  echo "Refreshing Kublr token with endpoint '${<<parameters.kublr-endpoint>>:-}' and user '${<<parameters.kublr-username>>:-}'"
+                  KUBLR_RESPONSE="$(curl -s \
+                    -d "grant_type=password" \
+                    -d "client_id=kublr-ui" \
+                    -d "username=${<<parameters.kublr-username>>}" \
+                    -d "password=${<<parameters.kublr-password>>}" \
+                    "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token")"
+                  export <<parameters.kublr-token>>="$(echo "${KUBLR_RESPONSE:-}" | jq -r '.access_token // empty')"
+                  if [ -n "${<<parameters.kublr-token>>:-}" ]; then
+                    echo "Kublr token refresh successful"
+                    echo "export <<parameters.kublr-token>>='${<<parameters.kublr-token>>}'" >> $BASH_ENV
+                  else
+                    echo "Kublr token refresh failed, response: ${KUBLR_RESPONSE}"
+                    exit 1
+                  fi
+                fi
+      kublr-api-call:
+        description: "Authenticate in Kublr Control Plane"
+        parameters:
+          kublr-endpoint:
+            type: env_var_name
+            description: Kublr Control Plane URL
+            default: KUBLR_ENDPOINT
+          kublr-token:
+            type: env_var_name
+            description: Kublr Control Plane Password
+            default: KUBLR_TOKEN
+          kublr-api-call-method:
+            type: string
+            description: Method to use when calling API (GET, POST, DELETE etc)
+            default: GET
+          kublr-api-call-path:
+            type: string
+            description: API path to call
+            default: /api/meta/version
+          result-env-var:
+            type: string
+            description: Env var to use to save result (none if empty)
+            default: ''
+          result-file:
+            type: string
+            description: File to save the result to (none if empty)
+            default: ''
+        steps:
+          - run:
+              name: "Kublr API call"
+              command: |
+                OUT="$(curl -s -f -H "Authorization: Bearer ${<<parameters.kublr-token>>:-}" "-X<<parameters.kublr-api-call-method>>" "${<<parameters.kublr-endpoint>>}<<parameters.kublr-api-call-path>>")"
+                if [ "$?" != '0' ] ; then
+                  echo "Kublr API call -X'<<parameters.kublr-api-call-method>>' '${<<parameters.kublr-endpoint>>}<<parameters.kublr-api-call-path>>' failed, result: ${OUT:-}"
+                  exit 1
+                fi
+                echo "Kublr API call -X'<<parameters.kublr-api-call-method>>' '${<<parameters.kublr-endpoint>>}<<parameters.kublr-api-call-path>>' successful"
+                if [ -n '<<parameters.result-file>>' ] ; then
+                  echo "Saving the result to file '<<parameters.result-file>>'"
+                  echo "${OUT:-}" > '<<parameters.result-file>>'
+                fi
+                if [ -n '<<parameters.result-env-var>>' ] ; then
+                  echo "Saving the result to env var '<<parameters.result-env-var>>'"
+                  echo "export <<parameters.result-env-var>>='${OUT:-}'" >> $BASH_ENV
+                fi
+      kublr-api-get-cluster-config:
+        description: "Retrieve a kubectl config file for a Kublr Kubernetes cluster"
+        parameters:
+          kublr-space:
+            type: string
+            description: Kublr space name
+            default: 'default'
+          kublr-cluster:
+            type: string
+            description: Kublr cluster name
+            default: ''
+          kubeconfig-env-var:
+            type: env_var_name
+            description: Env var for Kubernetes config path (set to empty if need not be set)
+            default: 'KUBECONFIG'
+          kubeconfig-file:
+            type: string
+            description: File for Kubernetes config
+            default: 'config'
+        steps:
+          - kublr-api-call:
+              kublr-api-call-path: '/api/spaces/<<parameters.kublr-space>>/cluster/<<parameters.kublr-cluster>>/config'
+              result-file: '<<parameters.kubeconfig-file>>'
+          - run:
+              name: Configure Kubernetes Config file
+              command: |
+                if [ -n '<<parameters.kubeconfig-env-var>>' ] ; then
+                  export <<parameters.kubeconfig-env-var>>="$(readlink -f '<<parameters.kubeconfig-file>>')"
+                  echo "Setting env var '<<parameters.kubeconfig-env-var>>' to '${<<parameters.kubeconfig-env-var>>:-}'"
+                  echo "export <<parameters.kubeconfig-env-var>>='${<<parameters.kubeconfig-env-var>>:-}'" >> $BASH_ENV
+                fi
