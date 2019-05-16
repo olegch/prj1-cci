@@ -16,6 +16,11 @@ jobs:
       - run: echo "Hello world"
       - kublr-auth
       - run: 'echo Token ${KUBLR_TOKEN}'
+      - kublr-api-call:
+          result-env-var: KUBLR_VERSION_JSON
+          result-file: kublr-version.json
+      - run: 'echo ${KUBLR_VERSION_JSON:-}'
+      - run: 'cat kublr-version.json'
 
 commands:
   kublr-auth:
@@ -38,29 +43,76 @@ commands:
         description: Kublr Control Plane Password
         default: KUBLR_TOKEN
     steps:
-      - run: |
-          if [ -n "${<<parameters.kublr-token>>:-}" ] ; then
-            if ! curl -s -f -H "Authorization: Bearer ${<<parameters.kublr-token>>:-}" "${<<parameters.kublr-endpoint>>}/api/meta/version" > /dev/null ; then
-              echo "Kublr token is expired, refresh"
-              export <<parameters.kublr-token>>=
-            else
-              echo "Kublr token is valid"
+      - run:
+          name: "Kublr authenticate"
+          command: |
+            if [ -n "${<<parameters.kublr-token>>:-}" ] ; then
+              if ! curl -s -f -H "Authorization: Bearer ${<<parameters.kublr-token>>:-}" "${<<parameters.kublr-endpoint>>}/api/meta/version" > /dev/null ; then
+                echo "Kublr token is expired, refresh"
+                export <<parameters.kublr-token>>=
+              else
+                echo "Kublr token is valid"
+              fi
             fi
-          fi
-          if [ -z "${<<parameters.kublr-token>>:-}" ] ; then
-            echo "Refreshing Kublr token with endpoint '${<<parameters.kublr-endpoint>>:-}' and user '${<<parameters.kublr-username>>:-}'"
-            KUBLR_RESPONSE="$(curl -s \
-              -d "grant_type=password" \
-              -d "client_id=kublr-ui" \
-              -d "username=${<<parameters.kublr-username>>}" \
-              -d "password=${<<parameters.kublr-password>>}" \
-              "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token")"
-            export <<parameters.kublr-token>>="$(echo "${KUBLR_RESPONSE:-}" | jq -r '.access_token // empty')"
-            if [ -n "${<<parameters.kublr-token>>:-}" ]; then
-              echo "Kublr token refresh successful"
-              echo "export <<parameters.kublr-token>>='${<<parameters.kublr-token>>}'" >> $BASH_ENV
-            else
-              echo "Kublr token refresh failed, response: ${KUBLR_RESPONSE}"
+            if [ -z "${<<parameters.kublr-token>>:-}" ] ; then
+              echo "Refreshing Kublr token with endpoint '${<<parameters.kublr-endpoint>>:-}' and user '${<<parameters.kublr-username>>:-}'"
+              KUBLR_RESPONSE="$(curl -s \
+                -d "grant_type=password" \
+                -d "client_id=kublr-ui" \
+                -d "username=${<<parameters.kublr-username>>}" \
+                -d "password=${<<parameters.kublr-password>>}" \
+                "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token")"
+              export <<parameters.kublr-token>>="$(echo "${KUBLR_RESPONSE:-}" | jq -r '.access_token // empty')"
+              if [ -n "${<<parameters.kublr-token>>:-}" ]; then
+                echo "Kublr token refresh successful"
+                echo "export <<parameters.kublr-token>>='${<<parameters.kublr-token>>}'" >> $BASH_ENV
+              else
+                echo "Kublr token refresh failed, response: ${KUBLR_RESPONSE}"
+                exit 1
+              fi
+            fi
+  kublr-api-call:
+    description: "Authenticate in Kublr Control Plane"
+    parameters:
+      kublr-endpoint:
+        type: env_var_name
+        description: Kublr Control Plane URL
+        default: KUBLR_ENDPOINT
+      kublr-token:
+        type: env_var_name
+        description: Kublr Control Plane Password
+        default: KUBLR_TOKEN
+      kublr-api-call-method:
+        type: string
+        description: Method to use when calling API (GET, POST, DELETE etc)
+        default: GET
+      kublr-api-call-path:
+        type: string
+        description: API path to call
+        default: /api/meta/version
+      result-env-var:
+        type: string
+        description: Env var to use to save result (none if empty)
+        default: ''
+      result-file:
+        type: string
+        description: File to save the result to (none if empty)
+        default: ''
+    steps:
+      - run:
+          name: "Kublr API call"
+          command: |
+            OUT="$(curl -s -f -H "Authorization: Bearer ${<<parameters.kublr-token>>:-}" "-X<<parameters.kublr-api-call-method>>" "${<<parameters.kublr-endpoint>>}<<parameters.kublr-api-call-path>>")"
+            if [ "$?" != '0' ] ; then
+              echo "Kublr API call -X'<<parameters.kublr-api-call-method>>' '${<<parameters.kublr-endpoint>>}<<parameters.kublr-api-call-path>>' failed, result: ${OUT:-}"
               exit 1
             fi
-          fi
+            echo "Kublr API call -X'<<parameters.kublr-api-call-method>>' '${<<parameters.kublr-endpoint>>}<<parameters.kublr-api-call-path>>' successful"
+            if [ -n '<<parameters.result-file>>' ] ; then
+              echo "Saving the result to file '<<parameters.result-file>>'"
+              echo "${OUT:-}" > '<<parameters.result-file>>'
+            fi
+            if [ -n '<<parameters.result-env-var>>' ] ; then
+              echo "Saving the result to anv var '<<parameters.result-env-var>>'"
+              echo "export <<parameters.result-env-var>>='${OUT:-}'" >> $BASH_ENV
+            fi
