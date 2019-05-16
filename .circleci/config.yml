@@ -48,7 +48,7 @@ commands:
             fi
           fi
           if [ -z "${<<parameters.kublr-token>>:-}" ] ; then
-            echo "Refreshing Kublr token with user: ${<<parameters.kublr-username>>:-}"
+            echo "Refreshing Kublr token with endpoint '${<<parameters.kublr-endpoint>>:-}' and user '${<<parameters.kublr-username>>:-}'"
             KUBLR_RESPONSE="$(curl -s \
               -d "grant_type=password" \
               -d "client_id=kublr-ui" \
