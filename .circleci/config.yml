@@ -20,7 +20,7 @@ commands:
         type: env_var_name
         description: Kublr Control Plane Username
         default: KUBLR_USERNAME
-      kublr-endpoint:
+      kublr-password:
         type: env_var_name
         description: Kublr Control Plane Password
         default: KUBLR_PASSWORD
