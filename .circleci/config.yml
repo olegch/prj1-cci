@@ -13,15 +13,19 @@ jobs:
       - image: circleci/node:4.8.2
     steps:
       - checkout
-      - run: echo "Hello world"
       - kublr-auth
-      - run: 'echo Token ${KUBLR_TOKEN}'
+      - run: 'echo "KUBLR_TOKEN=${KUBLR_TOKEN:-}"'
       - kublr-api-call:
           result-env-var: KUBLR_VERSION_JSON
           result-file: kublr-version.json
-      - run: 'echo ${KUBLR_VERSION_JSON:-}'
+      - run: 'echo "KUBLR_VERSION_JSON=${KUBLR_VERSION_JSON:-}"'
       - run: 'cat kublr-version.json'
-
+      - kublr-get-cluster-config:
+          kublr-space: demo
+          kublr-cluster: aws-demo-1
+      - run: 'echo "KUBECONFIG=${KUBECONFIG:-}"'
+      - run: 'cat config'
+      - run: 'cat "${KUBECONFIG:-}"'
 commands:
   kublr-auth:
     description: "Authenticate in Kublr Control Plane"
@@ -113,6 +117,37 @@ commands:
               echo "${OUT:-}" > '<<parameters.result-file>>'
             fi
             if [ -n '<<parameters.result-env-var>>' ] ; then
-              echo "Saving the result to anv var '<<parameters.result-env-var>>'"
+              echo "Saving the result to env var '<<parameters.result-env-var>>'"
               echo "export <<parameters.result-env-var>>='${OUT:-}'" >> $BASH_ENV
+            fi
+  kublr-get-cluster-config:
+    description: "Retrieve a kubectl config file for a Kublr Kubernetes cluster"
+    parameters:
+      kublr-space:
+        type: string
+        description: Kublr space name
+        default: 'default'
+      kublr-cluster:
+        type: string
+        description: Kublr cluster name
+        default: ''
+      kubeconfig-env-var:
+        type: env_var_name
+        description: Env var for Kubernetes config path (set to empty if need not be set)
+        default: 'KUBECONFIG'
+      kubeconfig-file:
+        type: string
+        description: File for Kubernetes config
+        default: 'config'
+    steps:
+      - kublr-api-call:
+          kublr-api-call-path: '/api/spaces/<<parameters.kublr-space>>/cluster/<<parameters.kublr-cluster>>/config'
+          result-file: '<<parameters.kubeconfig-file>>'
+      - run:
+          name: Configure Kubernetes Config file
+          command: |
+            if [ -n '<<parameters.kubeconfig-env-var>>' ] ; then
+              export <<parameters.kubeconfig-env-var>>="$(readlink -f '<<parameters.kubeconfig-file>>')"
+              echo "Setting env var '<<parameters.kubeconfig-env-var>>' to '${<<parameters.kubeconfig-env-var>>:-}'"
+              echo "export <<parameters.kubeconfig-env-var>>='${<<parameters.kubeconfig-env-var>>:-}'" >> $BASH_ENV
             fi
