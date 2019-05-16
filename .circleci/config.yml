@@ -1,15 +1,18 @@
 version: 2.1
 
 jobs:
-  build:
-    docker:
-      - image: circleci/node:4.8.2
-    steps:
-      - checkout
-      - run: echo "hello world"
+  - my-test-build:
+      context: v111-kublr-demo
+      docker:
+        - image: circleci/node:4.8.2
+      steps:
+        - checkout
+        - run: echo "hello world"
+        - kublr-auth
+
 
 commands:
-  auth:
+  kublr-auth:
     description: "Authenticate in Kublr Control Plane"
     parameters:
       kublr-endpoint:
