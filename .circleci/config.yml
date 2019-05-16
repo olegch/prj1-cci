@@ -9,7 +9,6 @@ workflows:
 
 jobs:
   my-test-build:
-    context: v111-kublr-demo
     docker:
       - image: circleci/node:4.8.2
     steps:
