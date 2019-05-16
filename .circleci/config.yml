@@ -35,7 +35,25 @@ commands:
         default: KUBLR_PASSWORD
     steps:
       - run: |
-          KUBLR_TOKEN="$(curl \
+          curl \
+            -d "grant_type=password" \
+            -d "client_id=kublr-ui" \
+            -d "username=${<<parameters.kublr-username>>}" \
+            -d "password=${<<parameters.kublr-password>>}" \
+            "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token"
+          curl \
+            -d "grant_type=password" \
+            -d "client_id=kublr-ui" \
+            -d "username=${<<parameters.kublr-username>>}" \
+            -d "password=${<<parameters.kublr-password>>}" \
+            "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token" | jq
+          curl \
+            -d "grant_type=password" \
+            -d "client_id=kublr-ui" \
+            -d "username=${<<parameters.kublr-username>>}" \
+            -d "password=${<<parameters.kublr-password>>}" \
+            "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token" | jq -r '.access_token'
+          export KUBLR_TOKEN="$(curl \
             -d "grant_type=password" \
             -d "client_id=kublr-ui" \
             -d "username=${<<parameters.kublr-username>>}" \
