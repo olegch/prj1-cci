@@ -34,11 +34,11 @@ commands:
         description: Kublr Control Plane Password
         default: KUBLR_PASSWORD
     steps:
-      - |
-        KUBLR_TOKEN="$(curl \
-          -d "grant_type=password" \
-          -d "client_id=kublr-ui" \
-          -d "username=${<<parameters.kublr-username>>}" \
-          -d "password=${<<parameters.kublr-password>>}" \
-          "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token" | jq -r '.access_token')"
-      - echo Token ${KUBLR_TOKEN}
+      - run: |
+          KUBLR_TOKEN="$(curl \
+            -d "grant_type=password" \
+            -d "client_id=kublr-ui" \
+            -d "username=${<<parameters.kublr-username>>}" \
+            -d "password=${<<parameters.kublr-password>>}" \
+            "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token" | jq -r '.access_token')"
+      - run: 'echo Token ${KUBLR_TOKEN}'
