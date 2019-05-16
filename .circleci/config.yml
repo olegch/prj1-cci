@@ -1,5 +1,12 @@
 version: 2.1
 
+workflows:
+  version: 2
+  main:
+    jobs:
+      - my-test-build:
+          context: v111-kublr-demo
+
 jobs:
   my-test-build:
     context: v111-kublr-demo
