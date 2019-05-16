@@ -13,9 +13,9 @@ jobs:
       - image: circleci/node:4.8.2
     steps:
       - checkout
-      - run: echo "hello world"
+      - run: echo "Hello world"
       - kublr-auth
-
+      - run: 'echo Token ${KUBLR_TOKEN}'
 
 commands:
   kublr-auth:
@@ -33,33 +33,34 @@ commands:
         type: env_var_name
         description: Kublr Control Plane Password
         default: KUBLR_PASSWORD
+      kublr-token:
+        type: env_var_name
+        description: Kublr Control Plane Password
+        default: KUBLR_TOKEN
     steps:
       - run: |
-          curl \
-            -d "grant_type=password" \
-            -d "client_id=kublr-ui" \
-            -d "username=${<<parameters.kublr-username>>}" \
-            -d "password=${<<parameters.kublr-password>>}" \
-            "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token"
-          curl \
-            -d "grant_type=password" \
-            -d "client_id=kublr-ui" \
-            -d "username=${<<parameters.kublr-username>>}" \
-            -d "password=${<<parameters.kublr-password>>}" \
-            "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token" | jq
-          curl \
-            -d "grant_type=password" \
-            -d "client_id=kublr-ui" \
-            -d "username=${<<parameters.kublr-username>>}" \
-            -d "password=${<<parameters.kublr-password>>}" \
-            "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token" | jq -r '.access_token'
-          export KUBLR_TOKEN="$(curl \
-            -d "grant_type=password" \
-            -d "client_id=kublr-ui" \
-            -d "username=${<<parameters.kublr-username>>}" \
-            -d "password=${<<parameters.kublr-password>>}" \
-            "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token" | jq -r '.access_token')"
-          echo "export KUBLR_TOKEN='${KUBLR_TOKEN}'" >> $BASH_ENV
-          echo "export KUBLR_TOKEN='${KUBLR_TOKEN}'"
-          cat $BASH_ENV
-      - run: 'echo Token ${KUBLR_TOKEN}'
+          if [ -n "${<<parameters.kublr-token>>:-}" ] ; then
+            if ! curl -s -f -H "Authorization: Bearer ${<<parameters.kublr-token>>:-}" "${<<parameters.kublr-endpoint>>}/api/meta/version" > /dev/null ; then
+              echo "Kublr token is expired, refresh"
+              export <<parameters.kublr-token>>=
+            else
+              echo "Kublr token is valid"
+            fi
+          fi
+          if [ -z "${<<parameters.kublr-token>>:-}" ] ; then
+            echo "Refreshing Kublr token"
+            KUBLR_RESPONSE="$(curl -s \
+              -d "grant_type=password" \
+              -d "client_id=kublr-ui" \
+              -d "username=${<<parameters.kublr-username>>}" \
+              -d "password=${<<parameters.kublr-password>>}" \
+              "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token")"
+            export <<parameters.kublr-token>>="$(echo "${KUBLR_RESPONSE:-}" | jq -r '.access_token // empty')"
+            if [ -n "${<<parameters.kublr-token>>:-}" ]; then
+              echo "Kublr token refresh successful"
+              echo "export <<parameters.kublr-token>>='${<<parameters.kublr-token>>}'" >> $BASH_ENV
+            else
+              echo "Kublr token refresh failed, response: ${KUBLR_RESPONSE}"
+              exit 1
+            fi
+          fi
