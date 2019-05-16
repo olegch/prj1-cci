@@ -41,4 +41,5 @@ commands:
             -d "username=${<<parameters.kublr-username>>}" \
             -d "password=${<<parameters.kublr-password>>}" \
             "${<<parameters.kublr-endpoint>>}/auth/realms/kublr-ui/protocol/openid-connect/token" | jq -r '.access_token')"
+          echo "export KUBLR_TOKEN='${KUBLR_TOKEN}'" >> $BASH_ENV
       - run: 'echo Token ${KUBLR_TOKEN}'
